@@ -450,6 +450,21 @@ export function ChatApp({ host, config }: ChatAppProps) {
         if (list) list.scrollTop = list.scrollHeight
     }, [messages, thinking])
 
+    // Al terminar la respuesta, alinea el INICIO del último mensaje con el
+    // borde superior de la ventana: la lectura continúa hacia abajo en vez de
+    // quedar la vista clavada al final del texto. Declarado después del
+    // auto-scroll para que su posición gane en el render final.
+    useEffect(() => {
+        if (!open || streaming) return
+        const list = messagesRef.current
+        if (!list) return
+        const items = list.querySelectorAll('.ecoflow-msg')
+        const last = items[items.length - 1] as HTMLElement | undefined
+        if (!last) return
+        const delta = last.getBoundingClientRect().top - list.getBoundingClientRect().top - 4
+        list.scrollTo({ top: list.scrollTop + delta, behavior: 'smooth' })
+    }, [open, streaming, messages])
+
     useEffect(() => {
         if (open && config.textInputAutoFocus && !recording) {
             // rAF: esperar a que la ventana termine de montarse
