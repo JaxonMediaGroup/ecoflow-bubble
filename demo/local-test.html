@@ -18,29 +18,22 @@
   </head>
   <body>
     <main>
-      <h1>Prueba local: STT + bocina TTS</h1>
+      <h1>Prueba local: animación del input</h1>
       <ul>
-        <li>Envía un mensaje: la respuesta del bot debe traer el botón de bocina.</li>
-        <li>La bocina pide la voz a <code>/api/v1/text-to-speech/generate</code> del servidor real.</li>
-        <li>Si el chatflow aún no es público o no tiene TTS, la bocina se oculta sola tras el primer clic.</li>
+        <li>Al enviar un mensaje, el borde del input se ilumina con un gradiente deslizándose mientras llega la respuesta.</li>
       </ul>
     </main>
 
     <script>
       window.ECOFLOW_CONFIG = {
-        chatflowId: "cd55ce82-5916-4117-aa3a-98ebd5d0c890",
+        chatflowId: "9e92eac6-5cc3-4630-95da-5798820d919c",
         apiHost: "https://ecoflow.koppi.mx",
-        buttonType: "icon",
         buttonBackgroundColor: "#000000",
         windowTitle: "Nizuc Concierge",
         windowWelcomeMessage: "Hello! How can I assist you today?",
-        windowErrorMessage: "Connection error, please try again.",
         textInputPlaceholder: "Ask me anything...",
-        userMessageBackgroundColor: "#000000",
-        userMessageTextColor: "#ffffff",
-        botMessageShowAvatar: false,
         glass: true,
-        persistConversation: true
+        persistConversation: false
       };
     </script>
     <script src="../dist/ecoflow-bubble.js" defer></script>

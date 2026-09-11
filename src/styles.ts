@@ -385,6 +385,54 @@ export const WIDGET_CSS = `
 }
 .ecoflow-input:focus { border-color: var(--ec-c-send); }
 .ecoflow-input:disabled { opacity: 0.6; }
+
+/* Anillo de "esperando respuesta": un haz de luz que recorre el borde del
+   input mientras el agente procesa. Se dibuja con ::before + máscara para
+   que solo se vea el borde, sin cambios de layout. @property permite animar
+   el ángulo del conic-gradient (Chrome/Edge/Safari 16.4+/Firefox 128+). */
+@property --ec-beam {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.ecoflow-input-shell {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.ecoflow-input-shell::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 21px;
+  padding: 1.6px;
+  /* fallback estático para navegadores sin registro de --ec-beam */
+  background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6);
+  background: conic-gradient(
+    from var(--ec-beam),
+    rgba(56, 189, 248, 0) 0%,
+    #38bdf8 10%,
+    #a78bfa 17%,
+    #f472b6 24%,
+    rgba(244, 114, 182, 0) 34%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.ecoflow-input-shell--waiting::before {
+  opacity: 1;
+  animation: ecoflow-input-glow 1.8s linear infinite;
+}
+@keyframes ecoflow-input-glow {
+  to { --ec-beam: 360deg; }
+}
 .ecoflow-send {
   display: flex;
   align-items: center;

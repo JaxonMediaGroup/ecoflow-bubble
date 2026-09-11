@@ -50,4 +50,15 @@ describe('glass tint', () => {
             'background: var(--ec-glass-bot-bg, color-mix(in srgb, var(--ec-glass-tint) 52%, black));'
         )
     })
+
+    it('ilumina el borde del input mientras se espera la respuesta', () => {
+        expect(WIDGET_CSS).toContain('.ecoflow-input-shell--waiting::before')
+        expect(WIDGET_CSS).toContain('@keyframes ecoflow-input-glow')
+        // el haz recorre el perímetro: conic-gradient rotatorio vía @property
+        expect(WIDGET_CSS).toContain('@property --ec-beam')
+        expect(WIDGET_CSS).toContain('conic-gradient(')
+        expect(WIDGET_CSS).toContain('to { --ec-beam: 360deg; }')
+        // el anillo se dibuja con máscara para cubrir solo el borde, sin layout shift
+        expect(WIDGET_CSS).toContain('mask-composite: exclude')
+    })
 })

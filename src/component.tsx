@@ -20,6 +20,24 @@ function nextMessageId(): string {
     return 'msg-' + messageSeq
 }
 
+/**
+ * Registra --ec-beam en el documento: el CSS del widget vive en el shadow
+ * root y Chromium ignora los @property declarados ahí, sin el registro JS
+ * el conic-gradient del anillo de espera es inválido y no se pinta.
+ */
+if (typeof CSS !== 'undefined' && 'registerProperty' in CSS) {
+    try {
+        CSS.registerProperty({
+            name: '--ec-beam',
+            syntax: '<angle>',
+            inherits: false,
+            initialValue: '0deg'
+        })
+    } catch {
+        // ya registrada (doble montaje del módulo): no importa
+    }
+}
+
 const AGENT_ACTIVITY_LABEL: Record<string, string> = {
     thinking: 'Pensando…',
     tool: 'Usando herramientas…',
@@ -864,20 +882,23 @@ export function ChatApp({ host, config }: ChatAppProps) {
                                 </button>
                             </>
                         )}
-                        <input
-                            ref={inputRef}
-                            class="ecoflow-input"
-                            type="text"
-                            placeholder={config.textInputPlaceholder}
-                            maxLength={config.textInputMaxChars}
-                            value={inputValue}
-                            disabled={streaming || recording}
-                            aria-label={config.textInputPlaceholder}
-                            onInput={(event) => setInputValue((event.target as HTMLInputElement).value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Enter') send(inputValue, pendingImage ? [pendingImage] : undefined)
-                            }}
-                        />
+                        <div class={`ecoflow-input-shell${streaming ? ' ecoflow-input-shell--waiting' : ''}`}>
+                            <input
+                                ref={inputRef}
+                                class="ecoflow-input"
+                                type="text"
+                                placeholder={config.textInputPlaceholder}
+                                maxLength={config.textInputMaxChars}
+                                value={inputValue}
+                                disabled={streaming || recording}
+                                aria-label={config.textInputPlaceholder}
+                                onInput={(event) => setInputValue((event.target as HTMLInputElement).value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter')
+                                        send(inputValue, pendingImage ? [pendingImage] : undefined)
+                                }}
+                            />
+                        </div>
                         {showMic && !recording && (
                             <button
                                 class="ecoflow-icon-btn"
