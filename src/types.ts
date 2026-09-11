@@ -226,6 +226,7 @@ export type SseEventName =
     | 'tts_start'
     | 'tts_data'
     | 'tts_end'
+    | 'tts_error'
     | 'error'
     | 'end'
 

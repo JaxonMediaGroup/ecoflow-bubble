@@ -202,6 +202,28 @@ export const WIDGET_CSS = `
   padding: 3px 10px;
 }
 
+/* Bocina de TTS a demanda, dentro de la burbuja del bot */
+.ecoflow-msg-tts {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  padding: 4px 5px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.ecoflow-msg-tts:hover { opacity: 1; background: rgba(128, 128, 128, 0.16); }
+.ecoflow-msg-tts svg { width: 15px; height: 15px; display: block; }
+.ecoflow-msg-tts--active { opacity: 1; animation: ecoflow-tts-pulse 1.2s ease-in-out infinite; }
+@keyframes ecoflow-tts-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 /* Indicador de escritura */
 .ecoflow-typing { display: inline-flex; gap: 4px; padding: 12px 14px; }
 .ecoflow-typing span {

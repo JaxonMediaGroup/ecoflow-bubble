@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { sendPrediction } from './client'
+import { requestTextToSpeech, sendPrediction } from './client'
 
 describe('sendPrediction', () => {
     afterEach(() => {
@@ -132,5 +132,98 @@ describe('sendPrediction', () => {
         expect(onTtsStart).toHaveBeenCalledWith('audio/mpeg')
         expect(onTtsChunk).not.toHaveBeenCalled()
         expect(onTtsEnd).toHaveBeenCalledTimes(1)
+    })
+})
+
+describe('requestTextToSpeech', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    const sseResponse = (body: string) =>
+        new Response(
+            new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode(body))
+                    controller.close()
+                }
+            }),
+            { headers: { 'Content-Type': 'text/event-stream' } }
+        )
+
+    it('reproduce el flujo tts_start/tts_data/tts_end del endpoint generate', async () => {
+        // Framing del controller text-to-speech: "event: X\ndata: {json}\n\n"
+        const sse = [
+            'event: tts_start\ndata: {"event":"tts_start","data":{"chatMessageId":"msg-1","format":"mp3"}}\n\n',
+            'event: tts_data\ndata: {"event":"tts_data","data":{"chatMessageId":"msg-1","audioChunk":"AAAA"}}\n\n',
+            'event: tts_data\ndata: {"event":"tts_data","data":{"chatMessageId":"msg-1","audioChunk":"BBBB"}}\n\n',
+            'event: tts_end\ndata: {"event":"tts_end","data":{"chatMessageId":"msg-1"}}\n\n'
+        ].join('')
+        const fetchMock = vi.fn().mockResolvedValue(sseResponse(sse))
+        vi.stubGlobal('fetch', fetchMock)
+
+        const onTtsStart = vi.fn()
+        const onTtsChunk = vi.fn()
+        const onTtsEnd = vi.fn()
+        const onError = vi.fn()
+        await requestTextToSpeech(
+            {
+                apiHost: 'https://chat.example.test',
+                chatflowId: 'example-flow',
+                chatId: 'browser-chat',
+                chatMessageId: 'msg-1',
+                text: 'Hola'
+            },
+            { onTtsStart, onTtsChunk, onTtsEnd, onError }
+        )
+
+        expect(fetchMock.mock.calls[0][0]).toBe('https://chat.example.test/api/v1/text-to-speech/generate')
+        expect(onTtsStart).toHaveBeenCalledWith('mp3')
+        expect(onTtsChunk).toHaveBeenNthCalledWith(1, 'AAAA')
+        expect(onTtsChunk).toHaveBeenNthCalledWith(2, 'BBBB')
+        expect(onTtsEnd).toHaveBeenCalledTimes(1)
+        expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('reporta tts_error del servidor vía onError', async () => {
+        const sse = 'event: tts_error\ndata: {"event":"tts_error","data":{"error":"no active TTS provider"}}\n\n'
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(sse)))
+
+        const onTtsEnd = vi.fn()
+        const onError = vi.fn()
+        await requestTextToSpeech(
+            {
+                apiHost: 'https://chat.example.test',
+                chatflowId: 'example-flow',
+                chatId: 'browser-chat',
+                chatMessageId: 'msg-1',
+                text: 'Hola'
+            },
+            { onTtsChunk: vi.fn(), onTtsEnd, onError }
+        )
+
+        expect(onError).toHaveBeenCalledWith('no active TTS provider')
+        expect(onTtsEnd).not.toHaveBeenCalled()
+    })
+
+    it('traduce respuestas HTTP de error a onError', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(new Response('{"message":"Unauthorized"}', { status: 401 }))
+        )
+
+        const onError = vi.fn()
+        await requestTextToSpeech(
+            {
+                apiHost: 'https://chat.example.test',
+                chatflowId: 'example-flow',
+                chatId: 'browser-chat',
+                chatMessageId: 'msg-1',
+                text: 'Hola'
+            },
+            { onTtsChunk: vi.fn(), onTtsEnd: vi.fn(), onError }
+        )
+
+        expect(onError).toHaveBeenCalledWith('Unauthorized')
     })
 })

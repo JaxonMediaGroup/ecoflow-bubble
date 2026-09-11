@@ -1,5 +1,5 @@
 import { parseSseChunk } from './sse'
-import type { FileUpload } from '../types'
+import type { FileUpload, SseEvent } from '../types'
 
 export interface PredictionHandlers {
     /** Primer evento del stream */
@@ -92,13 +92,9 @@ export async function sendPrediction(
 
     handlers.onStart?.()
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
     let sawError = false
-
     // El fork cierra el stream con event 'end' y data '[DONE]'
-    const handleEvent = (event: { event: string; data: unknown }): boolean => {
+    const handleEvent = (event: SseEvent): boolean => {
         const { event: name, data } = event
         switch (name) {
             case 'token':
@@ -142,6 +138,19 @@ export async function sendPrediction(
         return false
     }
 
+    await readSseResponse(response.body, handleEvent)
+
+    if (!sawError) handlers.onDone()
+}
+
+/** Consume un stream SSE hasta que handleEvent devuelva true o cierre el stream */
+async function readSseResponse(
+    stream: ReadableStream<Uint8Array>,
+    handleEvent: (event: SseEvent) => boolean
+): Promise<void> {
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
     let finished = false
     while (!finished) {
         const { done, value } = await reader.read()
@@ -156,8 +165,92 @@ export async function sendPrediction(
             }
         }
     }
+}
 
-    if (!sawError) handlers.onDone()
+export interface TextToSpeechRequest {
+    apiHost: string
+    chatflowId: string
+    chatId: string
+    /** Id del mensaje que se quiere escuchar; el server lo usa para abortar */
+    chatMessageId: string
+    text: string
+}
+
+export interface TextToSpeechHandlers {
+    onTtsStart?: (format: string) => void
+    onTtsChunk: (base64: string) => void
+    onTtsEnd: () => void
+    /** Error de red, HTTP no OK o evento tts_error del servidor */
+    onError: (message: string) => void
+}
+
+/**
+ * TTS a demanda: pide al server sintetizar un texto concreto vía
+ * /api/v1/text-to-speech/generate. El endpoint es público pero solo acepta
+ * chatflows marcados como públicos; el server responde con el mismo flujo
+ * de eventos tts_start/tts_data/tts_end que el stream de predicción, o
+ * tts_error cuando el chatflow no tiene proveedor de voz activo.
+ */
+export async function requestTextToSpeech(
+    req: TextToSpeechRequest,
+    handlers: TextToSpeechHandlers,
+    signal?: AbortSignal
+): Promise<void> {
+    const base = req.apiHost.replace(/\/+$/, '')
+    const response = await fetch(`${base}/api/v1/text-to-speech/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chatflowId: req.chatflowId,
+            chatId: req.chatId,
+            chatMessageId: req.chatMessageId,
+            text: req.text
+        }),
+        signal
+    })
+
+    if (!response.ok || !response.body) {
+        let detail = `${response.status} ${response.statusText}`
+        try {
+            const errorBody = (await response.json()) as { message?: string; error?: string }
+            detail = errorBody?.message ?? errorBody?.error ?? detail
+        } catch {
+            // respuesta sin body JSON: nos quedamos con el status
+        }
+        handlers.onError(detail)
+        return
+    }
+
+    await readSseResponse(response.body, (event) => {
+        const { event: name, data } = event
+        switch (name) {
+            case 'tts_start':
+                if (data && typeof data === 'object') {
+                    const format = (data as { format?: string }).format ?? 'audio/mpeg'
+                    handlers.onTtsStart?.(format)
+                }
+                break
+            case 'tts_data':
+                if (data && typeof data === 'object') {
+                    const chunk = (data as { audioChunk?: string }).audioChunk
+                    if (chunk) handlers.onTtsChunk(chunk)
+                }
+                break
+            case 'tts_end':
+                handlers.onTtsEnd()
+                break
+            case 'tts_error':
+                if (data && typeof data === 'object') {
+                    handlers.onError((data as { error?: string }).error ?? 'TTS generation failed')
+                } else {
+                    handlers.onError(typeof data === 'string' ? data : 'TTS generation failed')
+                }
+                break
+            default:
+                break
+        }
+        return false
+    })
 }
 
 /** Genera un chatId estable por conversación sin dependencias externas */

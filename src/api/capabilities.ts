@@ -5,6 +5,11 @@ export interface AgentCapabilities {
     stt: boolean
     /** Voz de salida configurada en el agente (TTS) */
     tts: boolean
+    /**
+     * false cuando la config del chatflow no es consultable (flujo no público):
+     * tts=false en ese caso significa "desconocido", no "sin voz".
+     */
+    ttsKnown: boolean
     /** El agente acepta imágenes (modelo multimodal) */
     imageUploads: boolean
     /** MIME types de imagen aceptados */
@@ -16,6 +21,7 @@ export interface AgentCapabilities {
 export const NO_CAPABILITIES: AgentCapabilities = {
     stt: false,
     tts: false,
+    ttsKnown: false,
     imageUploads: false,
     imageTypes: [],
     imageMaxSizeMb: 5
@@ -85,9 +91,10 @@ export async function fetchCapabilities(apiHost: string, chatflowId: string): Pr
         if (response.ok) {
             const data = (await response.json()) as PublicChatflowResponse
             capabilities.tts = parseTextToSpeechConfig(data.textToSpeech)
+            capabilities.ttsKnown = true
         }
     } catch {
-        // flujo no público o error: TTS queda desactivado
+        // flujo no público o error: TTS queda como desconocido (ttsKnown false)
     }
 
     cache.set(key, capabilities)

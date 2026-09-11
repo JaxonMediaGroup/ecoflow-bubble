@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { audioBlobToUpload, isTtsPlaybackEnabled, parseTextToSpeechConfig } from '../src/api/capabilities'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+    audioBlobToUpload,
+    fetchCapabilities,
+    isTtsPlaybackEnabled,
+    parseTextToSpeechConfig
+} from '../src/api/capabilities'
 
 describe('parseTextToSpeechConfig', () => {
     it('detecta TTS cuando un proveedor está activo', () => {
@@ -35,5 +40,44 @@ describe('isTtsPlaybackEnabled', () => {
         expect(isTtsPlaybackEnabled(false)).toBe(false)
         expect(isTtsPlaybackEnabled(true)).toBe(true)
         expect(isTtsPlaybackEnabled('auto')).toBe(true)
+    })
+})
+
+describe('fetchCapabilities', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('distingue "sin TTS" de "config no consultable" con ttsKnown', async () => {
+        // flujo no público: el endpoint de config responde 401 → TTS desconocido
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(new Response('{"message":"Unauthorized"}', { status: 401 }))
+        )
+        const unknown = await fetchCapabilities('https://chat.example.test', 'flow-not-public')
+        expect(unknown.tts).toBe(false)
+        expect(unknown.ttsKnown).toBe(false)
+
+        // flujo público sin voz → TTS conocido y desactivado
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockImplementation(() =>
+                Promise.resolve(new Response(JSON.stringify({ textToSpeech: '{"none":{"status":true}}' })))
+            )
+        )
+        const noVoice = await fetchCapabilities('https://chat.example.test', 'flow-public-novoice')
+        expect(noVoice.tts).toBe(false)
+        expect(noVoice.ttsKnown).toBe(true)
+
+        // flujo público con voz → TTS conocido y activo
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockImplementation(() =>
+                Promise.resolve(new Response(JSON.stringify({ textToSpeech: '{"openai":{"status":true}}' })))
+            )
+        )
+        const withVoice = await fetchCapabilities('https://chat.example.test', 'flow-public-voice')
+        expect(withVoice.tts).toBe(true)
+        expect(withVoice.ttsKnown).toBe(true)
     })
 })

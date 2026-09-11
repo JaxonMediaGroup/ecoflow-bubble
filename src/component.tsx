@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { generateChatId, sendPrediction } from './api/client'
+import { generateChatId, requestTextToSpeech, sendPrediction } from './api/client'
 import {
     audioBlobToUpload,
     fetchCapabilities,
@@ -50,12 +50,20 @@ function decodeBase64Chunks(chunks: string[]): Uint8Array<ArrayBuffer> {
     return bytes.subarray(0, offset)
 }
 
-function Icon({ name }: { name: 'chat' | 'close' | 'send' | 'mic' | 'stop' | 'image' | 'reset' }) {
+function Icon({ name }: { name: 'chat' | 'close' | 'send' | 'mic' | 'stop' | 'image' | 'reset' | 'speaker' }) {
     switch (name) {
         case 'chat':
             return (
                 <svg viewBox="0 0 24 24" {...{ fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': true }}>
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+            )
+        case 'speaker':
+            return (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M11 5 6 9H3v6h3l5 4z" />
+                    <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                    <path d="M18.5 5.5a9 9 0 0 1 0 13" />
                 </svg>
             )
         case 'close':
@@ -177,7 +185,19 @@ function AttachedFiles({ uploads }: { uploads?: FileUpload[] }) {
     )
 }
 
-function MessageBubble({ message, config }: { message: Message; config: EcoflowChatConfig }) {
+function MessageBubble({
+    message,
+    config,
+    speaking,
+    showSpeaker,
+    onSpeak
+}: {
+    message: Message
+    config: EcoflowChatConfig
+    speaking: boolean
+    showSpeaker: boolean
+    onSpeak: (message: Message) => void
+}) {
     if (message.role === 'agent') {
         return (
             <div class="ecoflow-msg ecoflow-msg--agent">
@@ -209,11 +229,24 @@ function MessageBubble({ message, config }: { message: Message; config: EcoflowC
                 {isUser ? (
                     message.text
                 ) : (
-                    <div
-                        class="ecoflow-markdown"
-                        // El HTML ya pasó por DOMPurify en renderMarkdown
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
-                    />
+                    <>
+                        <div
+                            class="ecoflow-markdown"
+                            // El HTML ya pasó por DOMPurify en renderMarkdown
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
+                        />
+                        {!isError && showSpeaker && message.text && (
+                            <button
+                                class={`ecoflow-msg-tts${speaking ? ' ecoflow-msg-tts--active' : ''}`}
+                                onClick={() => onSpeak(message)}
+                                aria-label={speaking ? 'Detener voz' : 'Escuchar respuesta'}
+                                title={speaking ? 'Detener voz' : 'Escuchar respuesta'}
+                                type="button"
+                            >
+                                <Icon name={speaking ? 'stop' : 'speaker'} />
+                            </button>
+                        )}
+                    </>
                 )}
             </div>
         </div>
@@ -246,6 +279,8 @@ export function ChatApp({ host, config }: ChatAppProps) {
     const [recording, setRecording] = useState(false)
     const [pendingImage, setPendingImage] = useState<FileUpload | null>(null)
     const [micUnavailable, setMicUnavailable] = useState(false)
+    const [speakingId, setSpeakingId] = useState<string | null>(null)
+    const [ttsDemandBroken, setTtsDemandBroken] = useState(false)
 
     const chatIdRef = useRef<string>('')
     const welcomedRef = useRef(false)
@@ -261,6 +296,7 @@ export function ChatApp({ host, config }: ChatAppProps) {
     const ttsChunksRef = useRef<string[]>([])
     const ttsFormatRef = useRef<string>('audio/mpeg')
     const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
+    const ttsAbortRef = useRef<AbortController | null>(null)
     const lastUserMessageIdRef = useRef<string>('')
 
     // Restaurar chatId persistido; sin persistencia o vacío, uno nuevo
@@ -308,11 +344,14 @@ export function ChatApp({ host, config }: ChatAppProps) {
     }
 
     const stopTts = () => {
+        ttsAbortRef.current?.abort()
+        ttsAbortRef.current = null
         if (ttsAudioRef.current) {
             ttsAudioRef.current.pause()
             if (ttsAudioRef.current.src.startsWith('blob:')) URL.revokeObjectURL(ttsAudioRef.current.src)
             ttsAudioRef.current = null
         }
+        setSpeakingId(null)
     }
 
     const closeChat = () => {
@@ -491,18 +530,12 @@ export function ChatApp({ host, config }: ChatAppProps) {
     }
 
     // ---------- TTS: replay de los chunks que envía el servidor ----------
-    const handleTtsStart = (format: string) => {
-        stopTts()
-        ttsChunksRef.current = []
-        ttsFormatRef.current = format.includes('/') ? format : `audio/${format === 'mp3' ? 'mpeg' : format}`
-    }
-    const handleTtsChunk = (base64: string) => {
-        ttsChunksRef.current.push(base64)
-    }
-    const handleTtsEnd = () => {
-        // En modo auto, el propio evento tts_* es la fuente de verdad: el
-        // endpoint de configuración puede no ser público aunque TTS funcione.
-        if (!isTtsPlaybackEnabled(config.voiceOutput) || ttsChunksRef.current.length === 0) return
+    const ttsMimeFrom = (format: string) =>
+        format.includes('/') ? format : `audio/${format === 'mp3' ? 'mpeg' : format}`
+
+    /** Reproduce los chunks base64 acumulados; false si no había audio */
+    const playCollectedTts = (): boolean => {
+        if (ttsChunksRef.current.length === 0) return false
         const bytes = decodeBase64Chunks(ttsChunksRef.current)
         ttsChunksRef.current = []
         const audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: ttsFormatRef.current })))
@@ -510,10 +543,73 @@ export function ChatApp({ host, config }: ChatAppProps) {
         audio.onended = () => {
             if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src)
             if (ttsAudioRef.current === audio) ttsAudioRef.current = null
+            setSpeakingId(null)
         }
         audio.play().catch(() => {
             // autoplay bloqueado por el navegador: el texto sigue visible
             stopTts()
+        })
+        return true
+    }
+
+    const handleTtsStart = (format: string) => {
+        stopTts()
+        ttsChunksRef.current = []
+        ttsFormatRef.current = ttsMimeFrom(format)
+    }
+    const handleTtsChunk = (base64: string) => {
+        ttsChunksRef.current.push(base64)
+    }
+    const handleTtsEnd = () => {
+        // En modo auto, el propio evento tts_* es la fuente de verdad: el
+        // endpoint de configuración puede no ser público aunque TTS funcione.
+        if (!isTtsPlaybackEnabled(config.voiceOutput)) return
+        playCollectedTts()
+    }
+
+    /** TTS a demanda: pide al server la voz de una respuesta concreta */
+    const speakMessage = (message: Message) => {
+        if (speakingId === message.id) {
+            stopTts()
+            return
+        }
+        if (!message.text || !config.chatflowId || !config.apiHost) return
+        stopTts()
+        setSpeakingId(message.id)
+        ttsChunksRef.current = []
+        ttsFormatRef.current = 'audio/mpeg'
+        const controller = new AbortController()
+        ttsAbortRef.current = controller
+        requestTextToSpeech(
+            {
+                apiHost: config.apiHost,
+                chatflowId: config.chatflowId,
+                chatId: chatIdRef.current,
+                chatMessageId: message.id,
+                text: message.text
+            },
+            {
+                onTtsStart: (format) => {
+                    ttsFormatRef.current = ttsMimeFrom(format)
+                },
+                onTtsChunk: (base64) => ttsChunksRef.current.push(base64),
+                onTtsEnd: () => {
+                    ttsAbortRef.current = null
+                    if (!playCollectedTts()) setSpeakingId(null)
+                },
+                onError: () => {
+                    // el chatflow no tiene voz (o no es público): la bocina se
+                    // oculta el resto de la sesión para no ofrecer algo roto
+                    ttsAbortRef.current = null
+                    setSpeakingId(null)
+                    setTtsDemandBroken(true)
+                }
+            },
+            controller.signal
+        ).catch(() => {
+            // red caída o abort del usuario: restaurar el botón
+            if (!controller.signal.aborted) setTtsDemandBroken(true)
+            setSpeakingId(null)
         })
     }
 
@@ -523,6 +619,9 @@ export function ChatApp({ host, config }: ChatAppProps) {
         const hasUploads = (uploads?.length ?? 0) > 0
         if ((!text && !hasUploads) || streaming || recording) return
         if (!config.chatflowId || !config.apiHost) return
+
+        // corta la voz que esté sonando antes de pedir una nueva respuesta
+        stopTts()
 
         setInputValue('')
         setPendingImage(null)
@@ -637,6 +736,13 @@ export function ChatApp({ host, config }: ChatAppProps) {
         : undefined
 
     const showMic = voiceInputOn && !micUnavailable
+    // Bocina a demanda: en auto se muestra salvo que sepamos con certeza que
+    // el agente no tiene TTS (chatflow público sin voz); un fallo real del
+    // endpoint la oculta por el resto de la sesión.
+    const showSpeaker =
+        config.voiceOutput !== false &&
+        !ttsDemandBroken &&
+        (config.voiceOutput === true || capabilities === null || capabilities.tts || !capabilities.ttsKnown)
     const acceptTypes = capabilities?.imageTypes?.join(',') || 'image/*'
 
     return (
@@ -674,7 +780,14 @@ export function ChatApp({ host, config }: ChatAppProps) {
 
                     <div class="ecoflow-messages" part="messages" ref={messagesRef} aria-live="polite">
                         {messages.map((message) => (
-                            <MessageBubble key={message.id} message={message} config={config} />
+                            <MessageBubble
+                                key={message.id}
+                                message={message}
+                                config={config}
+                                speaking={speakingId === message.id}
+                                showSpeaker={showSpeaker}
+                                onSpeak={speakMessage}
+                            />
                         ))}
                         {thinking && (
                             <div class="ecoflow-msg">
