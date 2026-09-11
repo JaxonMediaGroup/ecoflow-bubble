@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ecoflow Bubble – public demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #0d2a32;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background:
+          radial-gradient(circle at 15% 18%, rgba(94, 211, 191, .28), transparent 28rem),
+          radial-gradient(circle at 85% 85%, rgba(34, 104, 155, .35), transparent 31rem),
+          #0d2a32;
+      }
+
+      main {
+        max-width: 42rem;
+        padding: 2rem;
+      }
+
+      h1 { margin: 0 0 .5rem; }
+      p { color: rgba(255, 255, 255, .76); line-height: 1.55; }
+      code { color: #c7fff4; }
+
+      /* Example: tint only the bot's response, retaining the liquid-glass treatment. */
+      ecoflow-chat::part(message-bot) {
+        --ec-glass-bot-bg: rgba(13, 42, 50, .66);
+        --ec-glass-bot-color: #fff;
+        backdrop-filter: blur(16px) saturate(140%);
+        border: 1px solid rgba(255, 255, 255, .18);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Ecoflow Bubble</h1>
+      <p>
+        Replace the placeholder endpoint and chatflow ID below with your own public,
+        protected ECOflow deployment. Do not place API keys in this file.
+      </p>
+      <p>Build first with <code>npm run build</code>, then serve this folder with any static web server.</p>
+    </main>
+
+    <script
+      src="../dist/ecoflow-bubble.js"
+      data-chatflowid="replace-with-your-chatflow-id"
+      data-api-host="https://your-ecoflow-host.example"
+      data-window-title="Virtual assistant"
+      data-window-welcome-message="Replace the placeholders in demo/index.html to connect your assistant."
+      data-glass="true"
+      data-persist-conversation="false"
+      defer
+    ></script>
+  </body>
+</html>
