@@ -38,6 +38,17 @@ ecoflow-chat::part(message-bot) {
 }
 ```
 
+## Voice (STT & TTS)
+
+Voice controls follow each agent's configuration; no extra attributes are required.
+
+- **Voice input (STT)**: the microphone button appears when the chatflow has speech-to-text enabled (`data-voice-input="auto"` is the default; force it with `true`/`false`).
+- **Voice output (TTS)**: every bot message gets a speaker button that reads the answer on demand via the server's `/api/v1/text-to-speech/generate` endpoint. When the chatflow additionally enables TTS with *Auto Play*, streamed replies are spoken automatically.
+- On-demand synthesis requires the chatflow to be marked **public** in Flowise (share dialog → *Make Public*). No provider credentials reach the browser: the server resolves the provider configured on the chatflow.
+- If the server reports that the chatflow has no TTS provider, the speaker buttons hide themselves for the rest of the session.
+
+Control playback with `data-voice-output="auto|true|false"` (`auto` is the default).
+
 ## Security and privacy
 
 - Never put API keys, provider credentials, private agent configuration, or service-account files in browser code or in this repository.
