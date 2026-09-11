@@ -549,6 +549,7 @@ export function ChatApp({ host, config }: ChatAppProps) {
                 question: text,
                 chatId: chatIdRef.current,
                 streaming: true,
+                ...(Object.keys(config.overrideConfig).length ? { overrideConfig: config.overrideConfig } : {}),
                 ...(hasUploads ? { uploads } : {})
             },
             {

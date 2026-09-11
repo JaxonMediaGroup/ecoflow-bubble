@@ -107,6 +107,12 @@ export interface EcoflowChatConfig {
     showResetButton: boolean
     /** Conservar mensajes y chatId entre recargas de la página (localStorage) */
     persistConversation: boolean
+    /**
+     * Configuración adicional enviada al chatflow como `overrideConfig`.
+     * Útil para pasar `sessionId`, variables del sitio u opciones propias
+     * del agente sin exponerlas en la interfaz del widget.
+     */
+    overrideConfig: Record<string, unknown>
 
     // ---- Estilo ----
     /** Tema liquid glass: ventana translúcida con blur (como el bundle liquidglass) */
@@ -194,6 +200,7 @@ export const DEFAULT_CONFIG: EcoflowChatConfig = {
 
     showResetButton: true,
     persistConversation: true,
+    overrideConfig: {},
 
     glass: false,
     glassTintColor: ''
