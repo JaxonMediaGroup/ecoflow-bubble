@@ -223,6 +223,9 @@ export type SseEventName =
     | 'action'
     | 'abort'
     | 'usageMetadata'
+    | 'tts_start'
+    | 'tts_data'
+    | 'tts_end'
     | 'error'
     | 'end'
 

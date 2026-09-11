@@ -107,7 +107,7 @@ export interface FileUpload {
 }
 export declare const DEFAULT_CONFIG: EcoflowChatConfig;
 /** Eventos SSE que emite el servidor del fork (utils/SSEStreamer.ts) */
-export type SseEventName = 'start' | 'token' | 'thinking' | 'metadata' | 'tool' | 'usedTools' | 'calledTools' | 'agentReasoning' | 'nextAgent' | 'sourceDocuments' | 'artifacts' | 'fileAnnotations' | 'action' | 'abort' | 'usageMetadata' | 'error' | 'end';
+export type SseEventName = 'start' | 'token' | 'thinking' | 'metadata' | 'tool' | 'usedTools' | 'calledTools' | 'agentReasoning' | 'nextAgent' | 'sourceDocuments' | 'artifacts' | 'fileAnnotations' | 'action' | 'abort' | 'usageMetadata' | 'tts_start' | 'tts_data' | 'tts_end' | 'error' | 'end';
 export interface SseEvent {
     event: SseEventName | string;
     data: unknown;
