@@ -208,12 +208,14 @@ function MessageBubble({
     config,
     speaking,
     showSpeaker,
-    onSpeak
+    onSpeak,
+    chatId
 }: {
     message: Message
     config: EcoflowChatConfig
     speaking: boolean
     showSpeaker: boolean
+    chatId: () => string
     onSpeak: (message: Message) => void
 }) {
     if (message.role === 'agent') {
@@ -250,6 +252,10 @@ function MessageBubble({
                     <>
                         <div
                             class="ecoflow-markdown"
+                            onClick={(event) => {
+                                const a = (event.target as Element).closest('a[href]') as HTMLAnchorElement | null
+                                if (a && !isError) event.currentTarget.dispatchEvent(new CustomEvent('ecoflow-link-activate', { bubbles: true, composed: true, detail: { href: a.href, chatId: chatId() } }))
+                            }}
                             // El HTML ya pasó por DOMPurify en renderMarkdown
                             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
                         />
@@ -837,6 +843,7 @@ export function ChatApp({ host, config }: ChatAppProps) {
                                 speaking={speakingId === message.id}
                                 showSpeaker={showSpeaker}
                                 onSpeak={speakMessage}
+                                chatId={() => chatIdRef.current}
                             />
                         ))}
                         {thinking && (
